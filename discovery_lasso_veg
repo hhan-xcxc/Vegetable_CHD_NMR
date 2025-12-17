@@ -1,7 +1,7 @@
 ######################################################################################################################
 #' @Programmer: Han
 #' @Project: Vegetable Biomarkers and CHD Risk
-#' @Purpose: To develop urinary multi-feature indices predicting total vegetable intake (using total vegetable intake as an example)
+#' @Purpose: To develop urinary multi-feature indices predicting vegetable intake (using total vegetable intake as an example)
 ######################################################################################################################
 # clean the environment ---------------------------------------------------
 rm(list=ls())
