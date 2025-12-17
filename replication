@@ -1,0 +1,85 @@
+################################################################################################################
+#' @Programmer: Han
+#' @Project: Vegetable Biomarkers and CHD Risk
+#' @Purpose: To replicate multi-feature indices for total and subgroup vegetable intake in the SOLNAS cohort
+################################################################################################################
+# clean the environment---------------------------------------------------
+rm(list=ls())
+
+# settings-------------------------------------------------------------------------
+setwd("...")
+
+library(haven)
+library(openxlsx)  
+library(tidyverse)
+library(data.table)
+library(glmnet)
+library(MetabolAnalyze)
+library(ICC)
+library(tableone)
+options(bitmapType='cairo')
+
+getwd()
+
+#################### prepare SOLNAS dataset -------------------------------------------------------------------------
+# Individual-level data cannot be shared.
+# For more information, please refer to: https://sites9.cscc.unc.edu/hchs/home
+
+#################### check mutual features between LVS and SOLNAS -------------------------------------------------------------------------
+# load LVS data -------------------------------------------------------------------------
+ana_wk2 <- read.xlsx("./ana_wk2.xlsx", sheet = 1)
+
+# check: completely overlapped -------------------------------------------------------------------------
+SOLNAS_PPM<-names(solnas_fbm)[grepl("PPM",names(solnas_fbm))] 
+length(SOLNAS_PPM) #716
+
+LVS_PPM<-names(ana_wk2)[grepl("PPM",names(ana_wk2))]
+length(LVS_PPM) #589
+
+MUTUAL_PPM<-intersect(SOLNAS_PPM,LVS_PPM)
+length(MUTUAL_PPM) #589 (completely overlapped)
+
+#################### main: replication (threshold = 80%) -------------------------------------------------------------------------
+# vegtot_w_pot -------------------------------------------------------------------------
+ana_vegtot_w_pot <- read.xlsx(".../vegtot_w_pot_lasso.xlsx", sheet = "metab_sig")
+PPM_80 <- ana_vegtot_w_pot[which(ana_vegtot_w_pot$Freq >= 967), "fea_id"]
+ana_vegtot_w_pot <- ana_vegtot_w_pot[which(ana_vegtot_w_pot$fea_id%in%PPM_80),]
+
+solnas_vegtot_w_pot <- solnas_fbm  %>% dplyr::select(all_of(PPM_80))
+score_vegtot_w_pot <- solnas_vegtot_w_pot %>% as.matrix() %*% ana_vegtot_w_pot$coefficient
+#print(score_vegtot_w_pot)
+solnas_fbm$score_vegtot_w_pot <- as.numeric(score_vegtot_w_pot)
+summary(solnas_fbm$score_vegtot_w_pot)
+
+# correlation
+spearman_res  <- cor.test(solnas_fbm$vegtot_w_pot, solnas_fbm$score_vegtot_w_pot, method = "spearman", exact = F)
+spearman_corr <- spearman_res$estimate
+spearman_p    <- spearman_res$p.value
+spearman_ci   <- spearman_res$conf.int
+
+pearson_res  <- cor.test(solnas_fbm$vegtot_w_pot, solnas_fbm$score_vegtot_w_pot, method = "pearson")
+pearson_corr <- pearson_res$estimate
+pearson_p    <- pearson_res$p.value
+pearson_ci   <- pearson_res$conf.int
+
+icc_vegtot_w_pot <- icc_results[["icc_vegtot_w_pot"]]
+pearson_corr_deatt <- pearson_corr * sqrt(1 + (1 / icc_vegtot_w_pot - 1) / 2)
+
+res_vegtot_w_pot <- as.data.frame(cbind(
+  Spearman_Correlation = spearman_corr,
+  Spearman_CI_Lower = spearman_ci[1],
+  Spearman_CI_Upper = spearman_ci[2],
+  Spearman_p_value = spearman_p,
+  
+  Pearson_Correlation = pearson_corr,
+  Pearson_CI_Lower = pearson_ci[1],
+  Pearson_CI_Upper = pearson_ci[2],
+  Pearson_p_value = pearson_p,
+  
+  Deatt_Pearson_Correlation = pearson_corr_deatt,
+  ICC = icc_vegtot_w_pot
+))
+print(res_vegtot_w_pot)
+
+# Note: We applied the same pipeline to all other vegetable groups.
+
