@@ -1,5 +1,5 @@
 ######################################################################################################################
-#' @Programmer: Han Han
+#' @Programmer: Han
 #' @Project: Vegetable Biomarkers and CHD Risk
 #' @Purpose: To identify urinary features specifically associated with the intake of vegetable subgroups
 #' @Note: Similar to 'discovery_veg_ind', but targets the vegetable subgroup level.
