@@ -459,7 +459,7 @@ veg_group <- c("legume",               # legume: beans, peas, soy foods
 
 all_data <- list()
 for (veg in veg_group) {
-  sheet_data <- read.xlsx("./Output/veg_subgroup_sen_tpm.xlsx", sheet = veg)
+  sheet_data <- read.xlsx("./veg_subgroup_sen_tpm.xlsx", sheet = veg)
   sheet_data <- sheet_data[, c("nmr_ppm","veg_target","p1_logistic_est","p1_logistic_p_adj","p2_linear_bc_est","p2_linear_bc_p_adj")]
   all_data[[veg]] <- sheet_data
 }
