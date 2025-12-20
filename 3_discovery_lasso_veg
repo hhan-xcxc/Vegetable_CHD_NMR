@@ -223,3 +223,6 @@ addWorksheet(wb, "record")
 writeData(wb, "record", record)
 
 saveWorkbook(wb, "./vegtot_lasso.xlsx", overwrite = TRUE)
+
+# This script takes approximately 5 hours to run.
+# For other vegetable groups, the (analysis) pipeline remains the same.
