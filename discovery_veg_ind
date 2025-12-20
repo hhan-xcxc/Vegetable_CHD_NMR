@@ -7,7 +7,7 @@
 rm(list=ls())
 
 # packages -------------------------------------------------------------------------
-setwd("...") # data cannot be shared 
+setwd(".") # data cannot be shared 
 getwd()
 
 library(readr)
@@ -183,7 +183,7 @@ veg_ppm_summary2 <- sign_data2 %>%
   )
 
 #### save -------------------------------------------------------------------------
-output_file <- ".../veg_ind_sen_tpm.xlsx"
+output_file <- "./veg_ind_sen_tpm.xlsx"
 wb <- createWorkbook()
 
 # summary (p1 or p2)
@@ -221,9 +221,6 @@ saveWorkbook(wb, file = output_file, overwrite = TRUE)
 # two-part model:
 # part 1: logistic model (yes/no)
 # part 2: linear regression (box-cox transformed vegetable intake; among consumers)
-
-# 'osqua', 'liver', and 'apricot' were excluded due to low reporting frequency (<5%)
-# 'misc' was excluded due to unclear definition
 
 # total n=76
 food_item <- c("bean","soy",
@@ -370,8 +367,8 @@ results_all_fdr_sign <- results_all_fdr[which((results_all_fdr$p1_logistic_est>0
                                                 (results_all_fdr$p2_linear_bc_est>0 & results_all_fdr$p2_linear_bc_p_adj<0.05)),]
 table(results_all_fdr_sign$nmr_PPM_select)
 
-#### save -------------------------------------------------------------------------
-output_file <- ".../veg_ind_spec_tpm.xlsx"
+#### output -------------------------------------------------------------------------
+output_file <- "./veg_ind_spec_tpm.xlsx"
 wb <- createWorkbook()
 
 addWorksheet(wb, sheetName = "p1_or_p2_sign")
@@ -530,8 +527,8 @@ for (fea in fea_onion) {
   }
 }
 
-#### save -------------------------------------------------------------------------
-output_file <- ".../veg_ind_select_corr.xlsx"
+#### output -------------------------------------------------------------------------
+output_file <- "./veg_ind_select_corr.xlsx"
 wb <- createWorkbook()
 
 addWorksheet(wb, sheetName = "bruss")
