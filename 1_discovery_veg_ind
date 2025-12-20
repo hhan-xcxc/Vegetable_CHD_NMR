@@ -256,7 +256,7 @@ veg_ind <- c("bean","soy",
 all_data <- list()
 
 for (veg in veg_ind) {
-  sheet_data <- read.xlsx("./Output/veg_ind_sen_tpm.xlsx", sheet = veg)
+  sheet_data <- read.xlsx("./veg_ind_sen_tpm.xlsx", sheet = veg)
   sheet_data <- sheet_data[, c("nmr_ppm","veg_target","p2_linear_bc_est","p2_linear_bc_p_adj")]
   all_data[[veg]] <- sheet_data
 }
