@@ -1,13 +1,14 @@
 ######################################################################################################################
 #' @Programmer: Han
 #' @Project: Vegetable Biomarkers and CHD Risk
-#' @Purpose: To develop urinary multi-feature indices predicting vegetable intake (using total vegetable intake as an example)
+#' @Purpose: To develop urinary multi-feature indices predicting vegetable intake 
+#'           (using total vegetable intake as an example)
 ######################################################################################################################
 # clean the environment ---------------------------------------------------
 rm(list=ls())
 
 # packages -------------------------------------------------------------------------
-setwd("...")
+setwd(".")
 
 library(tibble)
 library(dplyr)
@@ -198,7 +199,7 @@ res8 <- format_cor_result_df(vegtot_score$vegtot_score100, vegtot_score$vegtot, 
 cor_result_df <- dplyr::bind_rows(res1, res2, res3, res4, res5, res6, res7, res8)
 print(cor_result_df)
 
-# save-------------------------------------------------------------------------
+# output-------------------------------------------------------------------------
 wb <- createWorkbook()
 
 # corr #
@@ -221,4 +222,4 @@ writeData(wb, "coefficients_data", coefficients_data)
 addWorksheet(wb, "record")
 writeData(wb, "record", record)
 
-saveWorkbook(wb, ".../vegtot_lasso.xlsx", overwrite = TRUE)
+saveWorkbook(wb, "./vegtot_lasso.xlsx", overwrite = TRUE)
