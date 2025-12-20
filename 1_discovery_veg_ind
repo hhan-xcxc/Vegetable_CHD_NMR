@@ -381,11 +381,11 @@ saveWorkbook(wb, file = output_file, overwrite = TRUE)
 
 # step 3. correlation -------------------------------------------------------------------------
 # From step 2 selected features, retain those linked to ≤5 non-target foods
-# Brussels sprout: (PPM2775, PPM2795, PPM2825) 
-# onion (PPM3165)
+# Brussels sprout: (PPM1, PPM2, PPM3) 
+# onion (PPM4)
 
 #### features for Brussels sprout intake -------------------------------------------------------------------------
-fea_bruss <- c("PPM2775","PPM2795","PPM2825")
+fea_bruss <- c("PPM1","PPM2","PPM3")
 var_bruss <- c("bruss",
                "brocc","caulif","cabbage","kale","crucif")
 
@@ -459,7 +459,7 @@ for (fea in fea_bruss) {
 cor(ana_wk2[, fea_bruss], use = "pairwise.complete.obs", method = "spearman")
 
 #### features for onion intake -------------------------------------------------------------------------
-fea_onion <- c("PPM3165")
+fea_onion <- c("PPM4")
 var_onion <- c("onion","mixveg") # associated foods
 
 # selected features and onion intake
