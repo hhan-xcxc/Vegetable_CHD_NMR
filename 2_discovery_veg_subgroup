@@ -369,14 +369,8 @@ saveWorkbook(wb, file = output_file, overwrite = TRUE)
 # step 3. correlation -------------------------------------------------------------------------
 #### with vegetable groups -------------------------------------------------------------------------
 # From step 2 selected features, retain those linked to vegetable groups
-# PPM2715,PPM2745 (otherveg)
-# PPM3165         (legume,redoveg,otherveg)
-# PPM3725         (redoveg,otherveg)
-# PPM6785,PPM6975 (dkgrveg)
-# PPM6795         (dkgrveg,redoveg)
-# PPM6805         (redoveg)
 
-fea_veg <- c("PPM2715","PPM2745","PPM3165","PPM3725","PPM6785","PPM6975","PPM6795","PPM6805")
+fea_veg <- c("PPMA","PPMB","PPMC","PPMD","PPME","PPMF","PPMG","PPMH")
 var_veg <- c("legume","starchy_w_pot","dkgrveg","redoveg","otherveg")
 
 # selected features and intake of vegetable subgroups
