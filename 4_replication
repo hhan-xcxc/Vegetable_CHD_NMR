@@ -7,7 +7,7 @@
 rm(list=ls())
 
 # settings-------------------------------------------------------------------------
-setwd("...")
+setwd(".")
 
 library(haven)
 library(openxlsx)  
@@ -31,17 +31,17 @@ ana_wk2 <- read.xlsx("./ana_wk2.xlsx", sheet = 1)
 
 # check: completely overlapped -------------------------------------------------------------------------
 SOLNAS_PPM<-names(solnas_fbm)[grepl("PPM",names(solnas_fbm))] 
-length(SOLNAS_PPM) #716
+length(SOLNAS_PPM)
 
 LVS_PPM<-names(ana_wk2)[grepl("PPM",names(ana_wk2))]
-length(LVS_PPM) #589
+length(LVS_PPM)
 
 MUTUAL_PPM<-intersect(SOLNAS_PPM,LVS_PPM)
 length(MUTUAL_PPM) #589 (completely overlapped)
 
 #################### main: replication (threshold = 80%) -------------------------------------------------------------------------
 # vegtot_w_pot -------------------------------------------------------------------------
-ana_vegtot_w_pot <- read.xlsx(".../vegtot_w_pot_lasso.xlsx", sheet = "metab_sig")
+ana_vegtot_w_pot <- read.xlsx("./vegtot_w_pot_lasso.xlsx", sheet = "metab_sig")
 PPM_80 <- ana_vegtot_w_pot[which(ana_vegtot_w_pot$Freq >= 967), "fea_id"]
 ana_vegtot_w_pot <- ana_vegtot_w_pot[which(ana_vegtot_w_pot$fea_id%in%PPM_80),]
 
