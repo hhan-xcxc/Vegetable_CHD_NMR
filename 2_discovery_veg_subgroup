@@ -8,7 +8,7 @@
 rm(list=ls())
 
 # packages -------------------------------------------------------------------------
-setwd("...")
+setwd(".")
 
 library(openxlsx)
 library(dplyr)
@@ -178,8 +178,8 @@ veg_ppm_summary2 <- sign_data2 %>%
     nmr_ppm_list = paste(nmr_ppm, collapse = ", ")  
   )
 
-#### save -------------------------------------------------------------------------
-output_file <- ".../veg_subgroup_sen_tpm.xlsx"
+#### output -------------------------------------------------------------------------
+output_file <- "./veg_subgroup_sen_tpm.xlsx"
 wb <- createWorkbook()
 
 # summary (p1 or p2)
@@ -226,7 +226,7 @@ veg_group <- c("legume",               # legume: beans, soy foods
 all_data <- list()
 
 for (veg in veg_group) {
-  sheet_data <- read.xlsx(".../veg_subgroup_sen_tpm.xlsx", sheet = veg)
+  sheet_data <- read.xlsx("./veg_subgroup_sen_tpm.xlsx", sheet = veg)
   sheet_data <- sheet_data[, c("nmr_ppm","veg_target","p1_logistic_est","p1_logistic_p_adj","p2_linear_bc_est","p2_linear_bc_p_adj")]
   all_data[[veg]] <- sheet_data
 }
@@ -354,8 +354,8 @@ table(results_all_fdr_sign$nmr_PPM_select)
 
 PPM_select2 <- unique(results_all_fdr_sign$nmr_PPM_select)
 
-#### save -------------------------------------------------------------------------
-output_file <- ".../veg_subgroup_spec_tpm.xlsx"
+#### output -------------------------------------------------------------------------
+output_file <- "./veg_subgroup_spec_tpm.xlsx"
 wb <- createWorkbook()
 
 addWorksheet(wb, sheetName = "p1_or_p2_sign")
@@ -445,8 +445,8 @@ for (fea in fea_veg) {
   }
 }
 
-# save
-output_file <- ".../veg_subgroup_select_corr.xlsx"
+# output
+output_file <- "./veg_subgroup_select_corr.xlsx"
 wb <- createWorkbook()
 
 addWorksheet(wb, sheetName = "veg_subgroup")
@@ -546,5 +546,5 @@ colnames(corr_sig) <- ifelse(is.na(food_labels[colnames(corr_sig)]),
                              colnames(corr_sig), 
                              food_labels[colnames(corr_sig)])
 corr_sig_out <- cbind(Feature = rownames(corr_sig), corr_sig)
-write.xlsx(corr_sig_out, file = ".../veg_subgroup_select_corr_foodgroups.xlsx", rowNames = FALSE)
+write.xlsx(corr_sig_out, file = "./veg_subgroup_select_corr_foodgroups.xlsx", rowNames = FALSE)
 
