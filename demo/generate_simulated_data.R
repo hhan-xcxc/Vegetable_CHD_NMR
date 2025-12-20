@@ -24,7 +24,7 @@ othfoods_mat <- matrix(
   dimnames = list(NULL, othfoods)
 )
 
-n_veg <- length(veg_mat)  # 元素总数
+n_veg <- length(veg_mat)
 idx_zero_veg <- sample(
   1:n_veg,
   size = round(prop_zero_veg * n_veg),
