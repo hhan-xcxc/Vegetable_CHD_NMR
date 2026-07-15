@@ -1,0 +1,401 @@
+######################################################################################################################
+#' @Programmer Han Han
+#' @Creation_date 02/2025
+#' @Revised_date 05/2026
+#' @Project Vegetable Biomarkers and CHD Risk
+#' @Purpose To construct multi-feature indices predicting the intake of specific vegetable groups
+######################################################################################################################
+# clean the environment ---------------------------------------------------
+rm(list=ls())
+
+# packages -------------------------------------------------------------------------
+options(bitmapType='cairo')
+
+library(openxlsx)
+library(caret)
+library(glmnet)
+library(tibble)
+library(dplyr)
+library(rlist)
+
+setwd(".")
+getwd()
+
+# load dataset -------------------------------------------------------------------------
+ana_wk2 <- readRDS("lvs_dataset_area_zscore_osm.rds")
+
+PPM<-names(ana_wk2)[grepl("PPM",names(ana_wk2))] # 589 NMR features
+ana_use_nmr <- ana_wk2[,PPM]
+
+# transformed-------------------------------------------------------------------------
+# Log(X+ minimum non-zero value/5)
+LOG.mini<-function(dta,X)
+{
+  for (i in 1:length(X)){
+    
+    mini5<-min(dta[dta[X[i]]>0,X[i]])/5
+    dta[,paste(X[i],"_LOG",sep="")]<-log(dta[X[i]]+mini5)
+    
+  }
+  
+  return(dta)  
+  
+}
+
+veg_var <- c(
+  "vegtot_w_pot","vegtot",
+  "legume","legume_wo_soy",
+  "potatoT","starchy","starchy_w_pot",
+  "crucif",
+  "dkgrlfveg","dkgrveg",
+  "redoveg","redoveg_wo_starchy",
+  "nonstarchy")
+
+ana_wk2<-LOG.mini(ana_wk2,veg_var)
+
+# function -------------------------------------------------------------------------
+eln.nmr<-function(data,
+                  a,
+                  X,
+                  Y){
+  
+  set.seed(20070430)
+  
+  sp.unique<-NULL
+  co_rr<-NULL
+  tune.para<-NULL
+  sp.id<-list()
+  result<-list()
+  
+  grid <- expand.grid(
+    alpha = a,
+    lambda = 10^seq(-5,1,length=1000)
+  )
+  
+  
+  for(i in 1:length(Y)){
+    
+    x<-as.data.frame(X)
+    y<-data[,Y[i]]
+    z<-cbind(x,y)
+    
+    print(dim(z))
+    
+    model <- train(
+      y ~., 
+      data = z, 
+      method = "glmnet",
+      # preProcess="scale",
+      trControl = trainControl("LOOCV"),
+      # tuneLength=25
+      tuneGrid=grid
+    )
+    
+    result<-list.append(result,model$result)
+    
+    names(result)[length(result)]<-paste(Y[i],sep = "")
+    
+    elnet<-coef(model$finalModel, model$bestTune$lambda)
+    
+    tune.para<-rbind(tune.para,model$bestTune)
+    
+    rownames(tune.para)[i]<-Y[i]
+    
+    elnet_coef<-as.data.frame(elnet[which(elnet[,1]!=0),1][-1])
+    
+    coef.out=as.data.frame(t(elnet_coef))
+    
+    rownames(coef.out)<-"Beta"
+    
+    CORR<-cor(as.matrix(data[colnames(coef.out)])%*%t(coef.out),data[Y[i]])
+    
+    co_rr<-cbind(co_rr,CORR)
+    
+    rownames(co_rr)<-"r"
+    colnames(co_rr)[i]<-Y[i]
+    
+    sp.unique<-c(sp.unique,rownames(elnet_coef))
+    
+    sp.id<-list.append(sp.id,coef.out)
+    
+    names(sp.id)[length(sp.id)]<-paste(Y[i],sep = "")
+    
+  }
+  
+  out=list(tune.para,co_rr,sp.id,unique(sp.unique),result)
+  
+  names(out)<-c("tuning_para",
+                "cor_score",
+                "sp_id",
+                "sp_unique",
+                "training")
+  
+  return(out)
+  
+}
+# procedure -------------------------------------------------------------------------
+#### alpha=0.1 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.1  <-eln.nmr(ana_wk2,
+                       0.1,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.1,file="./Output/veg_nmr_scale_0.1.RData")
+
+#### alpha=0.2 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.2  <-eln.nmr(ana_wk2,
+                       0.2,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.2,file="./Output/veg_nmr_scale_0.2.RData")
+
+#### alpha=0.3 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.3  <-eln.nmr(ana_wk2,
+                       0.3,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.3,file="./Output/veg_nmr_scale_0.3.RData")
+
+#### alpha=0.4 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.4  <-eln.nmr(ana_wk2,
+                       0.4,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.4,file="./Output/veg_nmr_scale_0.4.RData")
+
+#### alpha=0.5 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.5  <-eln.nmr(ana_wk2,
+                       0.5,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.5,file="./Output/veg_nmr_scale_0.5.RData")
+
+#### alpha=0.6 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.6  <-eln.nmr(ana_wk2,
+                       0.6,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.6,file="./Output/veg_nmr_scale_0.6.RData")
+
+#### alpha=0.7 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.7  <-eln.nmr(ana_wk2,
+                       0.7,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.7,file="./Output/veg_nmr_scale_0.7.RData")
+
+#### alpha=0.8 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.8  <-eln.nmr(ana_wk2,
+                       0.8,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.8,file="./Output/veg_nmr_scale_0.8.RData")
+
+#### alpha=0.9 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.9  <-eln.nmr(ana_wk2,
+                       0.9,
+                       ana_use_nmr, 
+                       paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.9,file="./Output/veg_nmr_scale_0.9.RData")
+
+#### alpha=1.0 -------------------------------------------------------------------------
+start.time <- Sys.time()
+
+nmr_scale.10  <-eln.nmr(ana_wk2,
+                        1.0,
+                        ana_use_nmr, 
+                        paste(veg_var, "_LOG"   ,sep=""))
+
+end.time <- Sys.time()
+end.time - start.time
+
+save(nmr_scale.10,file="./Output/veg_nmr_scale_1.0.RData")
+
+# score -------------------------------------------------------------------------
+nmr_scale_list <- list(
+  nmr_scale.1,
+  nmr_scale.2,
+  nmr_scale.3,
+  nmr_scale.4,
+  nmr_scale.5,
+  nmr_scale.6,
+  nmr_scale.7,
+  nmr_scale.8,
+  nmr_scale.9,
+  nmr_scale.10
+)
+
+get_food_beta <- function(nmr_scale_list,
+                          veg_var,
+                          out_dir = "./Output/",
+                          suffix = "_LOG",
+                          write_csv = TRUE) {
+  # rename
+  obj_name <- paste0(veg_var, suffix)
+  
+  ###
+  name_list <- lapply(
+    nmr_scale_list,
+    function(x) names(x$sp_id[[obj_name]])
+  )
+  common_ppm <- Reduce(intersect, name_list)
+  
+  if (length(common_ppm) == 0) {
+    stop("No common PPM variables found for ", obj_name)
+  }
+  
+  ###
+  beta_mat <- do.call(
+    rbind,
+    lapply(
+      nmr_scale_list,
+      function(x) x$sp_id[[obj_name]][, common_ppm, drop = FALSE]
+    )
+  )
+  
+  ###
+  beta_mean <- colMeans(beta_mat)
+  ppm_names <- colnames(beta_mat)
+  
+  res <- data.frame(
+    Betas = as.numeric(beta_mean),
+    PPM   = ppm_names,
+    row.names = NULL
+  )
+  
+  ### output
+  if (write_csv) {
+    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+    out_file <- file.path(out_dir,
+                          paste0(veg_var, ".eln.score.intake.LOG.csv"))
+    write.csv(res, out_file, row.names = FALSE)
+  }
+  
+  return(res)
+}
+
+
+res_list <- lapply(veg_var, get_food_beta,
+                   nmr_scale_list = nmr_scale_list)
+
+names(res_list) <- veg_var
+
+calc_scores_from_reslist <- function(data,
+                                     res_list,
+                                     intake_suffix = "_LOG") {
+  
+  food_vec <- names(res_list)
+  
+  score_list <- list()
+  cor_res_all <- list()
+  
+  for (f in food_vec) {
+    beta_df <- res_list[[f]]      # data.frame: Betas + PPM
+    
+    ppm_names <- beta_df$PPM
+    betas     <- beta_df$Betas
+    
+    # calc score
+    X <- as.matrix(data[, ppm_names, drop = FALSE])
+    score <- as.numeric(X %*% betas)
+    score_name <- paste0(f, ".score")
+    score_list[[score_name]] <- score
+    
+    # intake variable
+    intake_var <- paste0(f, intake_suffix)
+    intake_raw <- f
+    
+    # calc correlation
+    pear.log  <- cor.test(data[[intake_var]], score, method = "pearson")
+    pear.raw  <- cor.test(data[[intake_raw]], score, method = "pearson")
+    spear.raw <- cor.test(data[[intake_raw]], score, method = "spearman", exact = FALSE)
+    
+    cor_res_all[[f]] <- data.frame(
+      food          = f,
+      pearson.coef.log  = as.numeric(pear.log$estimate),
+      pearson.p.log     = pear.log$p.value,
+      pearson.coef.raw  = as.numeric(pear.raw$estimate),
+      pearson.p.raw     = pear.raw$p.value,
+      spearman.coef.raw = as.numeric(spear.raw$estimate),
+      spearman.p.raw    = spear.raw$p.value,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  score_df <- as.data.frame(score_list)
+  
+  if (length(cor_res_all) > 0) {
+    cor_df <- do.call(rbind, cor_res_all)
+    rownames(cor_df) <- NULL
+  } else {
+    cor_df <- data.frame()
+  }
+  
+  list(
+    scores = score_df,  
+    cor    = cor_df    
+  )
+}
+res_all <- calc_scores_from_reslist(ana_wk2, res_list)
+
+# save -------------------------------------------------------------------------
+output_file <- "./Output/veg_score_intake_cor.xlsx"
+wb <- createWorkbook()
+
+addWorksheet(wb, sheetName = "cor")
+writeData(wb, sheet = "cor", x = res_all[["cor"]])
+
+saveWorkbook(wb, file = output_file, overwrite = TRUE)
