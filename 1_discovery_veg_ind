@@ -1,7 +1,9 @@
 ######################################################################################################################
-#' @Programmer: Han
-#' @Project: Vegetable Biomarkers and CHD Risk
-#' @Purpose: To identify urinary features specifically associated with the intake of individual vegetables (step 1>2>3)
+#' @Programmer Han Han
+#' @Creation_date 02/2025
+#' @Revised_date 05/2026
+#' @Project Vegetable Biomarkers and CHD Risk
+#' @Purpose To identify urinary features specifically associated with the intake of individual vegetables (step 1>2>3)
 ######################################################################################################################
 # clean the environment ---------------------------------------------------
 rm(list=ls())
@@ -18,31 +20,45 @@ library(MASS)
 library(broom)
 options(bitmapType='cairo')
 
+# function -------------------------------------------------------------------------
+# inverse normal transformation
+INT<-function(dta,X)
+{
+  
+  for (i in 1:length(X)){
+    
+    dta[,paste(X[i],"_INT",sep="")]<-qnorm((rank(dta[,X[i]],na.last="keep")-0.5)/sum(!is.na(dta[,X[i]])))
+    
+  }
+  
+  return(dta)
+  
+}
+
 # load dataset -------------------------------------------------------------------------
-ana_wk2 <- read.xlsx("./ana_wk2.xlsx", sheet = 1) # n=1209
+ana_wk2 <- readRDS("lvs_dataset_area_zscore_osm.rds") # n =1407
 
 # individual vegetables -------------------------------------------------------------------------
 # Among 23 individual vegetable items in the LVS:
-# -'osqua' was excluded due to its low reporting rate (1.24%).
+# -'osqua' was excluded due to its low reporting rate (1.5%).
 # -'mixveg' was excluded as it likely contained multiple vegetables.
 # > A total of 21 individual vegetables were included in the discovery analysis
-
 veg_ind <- c("bean","soy",
              "potatoT","corn","yam","pea",
              "brocc","cabbage","caulif","bruss","kale",
              "spinach","rlett",
-             "tomatoT","carrot",
-             "celery","pepper","onion","eggplant",
-             "ilett","strbean") 
+             "tomatoT","carrot",#"osqua",
+             "celery","pepper","onion","eggplant","ilett","strbean") 
 
 # NMR features-------------------------------------------------------------------------
 PPM<-names(ana_wk2)[grepl("PPM",names(ana_wk2))] # 589 NMR features
+sum(is.na(ana_wk2[PPM])) # 0
 
 # step 1. sensitivity -------------------------------------------------------------------------
 #### modeling -------------------------------------------------------------------------
 # two-part model:
 # part 1: logistic model (yes/no)
-# part 2: linear regression (box-cox transformed vegetable intake; among consumers)
+# part 2: linear regression (int-transformed food intake; among consumers)
 
 results <- data.frame()
 
@@ -57,7 +73,7 @@ for (i in 1:length(PPM)) {
       na.omit()
     
     #---------------------- part 1 ----------------------#
-    p1_sample_size <- nrow(temp_data) # overall population, n=1209
+    p1_sample_size <- nrow(temp_data) # overall population, n=1407
     
     logistic_model <- glm(
       formula = as.formula(paste0(current_veg, " > 0 ~ ", current_ppm)),
@@ -76,28 +92,17 @@ for (i in 1:length(PPM)) {
     
     p2_sample_size <- nrow(temp_data_positive) # consumers
     
-    if (p2_sample_size < 60) next    # skip items with reporting frequency < 5% (i.e., 1209 * 0.05 = 60.45)
+    if (p2_sample_size < 70) next    # skip items with reporting frequency < 5% (i.e., 1407 * 0.05 = 70.35)
     
-    # Box-Cox transformed
-    if (length(unique(temp_data_positive[[current_veg]])) > 1) {
-      bc_model <- lm(as.formula(paste0(current_veg, "~", current_ppm)), data = temp_data_positive)
-      bc_result <- boxcox(bc_model, lambda = seq(-2, 2, by = 0.1))
-      bc_lambda <- bc_result$x[which.max(bc_result$y)]
-      
-      temp_data_positive$veg_trans <- if (bc_lambda == 0) {
-        log(temp_data_positive[[current_veg]])
-      } else {
-        (temp_data_positive[[current_veg]]^bc_lambda - 1) / bc_lambda
-      }
-    } else {
-      temp_data_positive$veg_trans <- temp_data_positive[[current_veg]]
-      bc_lambda <- NA  
-    }
+    # INT-transform
+    temp_data_positive <- INT(temp_data_positive, current_veg)
+    temp_data_positive$veg_trans <- temp_data_positive[[paste0(current_veg,"_INT")]]
     
     linear_model <- lm(
       formula = as.formula(paste0("veg_trans ~ ", current_ppm)),
       data = temp_data_positive
     )
+    
     linear_summary <- summary(linear_model)
     linear_estimate <- linear_summary$coefficients[2, "Estimate"]
     linear_se <- linear_summary$coefficients[2, "Std. Error"]
@@ -114,21 +119,20 @@ for (i in 1:length(PPM)) {
         p1_logistic_se = logistic_se,
         p1_logistic_p = logistic_pvalue,
         p2_n = p2_sample_size,
-        p2_linear_bc_est = linear_estimate,
-        p2_linear_bc_se = linear_se,
-        p2_linear_bc_p = linear_pvalue,
-        bc_lambda = bc_lambda
+        p2_linear_int_est = linear_estimate,
+        p2_linear_int_se = linear_se,
+        p2_linear_int_p = linear_pvalue
       )
     )
   }
 }
 
-# FDR adjustment applied separately within each vegetable
+# FDR adjustment applied separately within each veg
 results_fdr <- results %>%
   group_by(veg_target) %>%
   mutate(
     p1_logistic_p_adj = p.adjust(p1_logistic_p, method = "BH"),  
-    p2_linear_bc_p_adj = p.adjust(p2_linear_bc_p, method = "BH") 
+    p2_linear_int_p_adj = p.adjust(p2_linear_int_p, method = "BH") 
   ) %>%
   ungroup() 
 
@@ -136,7 +140,7 @@ results_fdr <- results %>%
 ### p1
 results_fdr$p1_fdr_label <- ifelse(results_fdr$p1_logistic_est>0 & results_fdr$p1_logistic_p_adj<0.05, 1, 0)
 ### p2
-results_fdr$p2_fdr_label <- ifelse(results_fdr$p2_linear_bc_est>0 & results_fdr$p2_linear_bc_p_adj<0.05, 1, 0)
+results_fdr$p2_fdr_label <- ifelse(results_fdr$p2_linear_int_est>0 & results_fdr$p2_linear_int_p_adj<0.05, 1, 0)
 ### p1 or p2
 results_fdr$p1_or_p2_fdr_label <- ifelse(results_fdr$p1_fdr_label==1 | results_fdr$p2_fdr_label==1, 1, 0)
 ### p1 and p2
@@ -183,7 +187,7 @@ veg_ppm_summary2 <- sign_data2 %>%
   )
 
 #### save -------------------------------------------------------------------------
-output_file <- "./veg_ind_sen_tpm.xlsx"
+output_file <- "./Output/veg_ind_sen_tpm.xlsx"
 wb <- createWorkbook()
 
 # summary (p1 or p2)
@@ -220,59 +224,56 @@ saveWorkbook(wb, file = output_file, overwrite = TRUE)
 # step 2. specificity -------------------------------------------------------------------------
 # two-part model:
 # part 1: logistic model (yes/no)
-# part 2: linear regression (box-cox transformed vegetable intake; among consumers)
+# part 2: linear regression (int-transformed food intake; among consumers)
 
-# total n=76
+# 'osqua', 'liver', and 'apricot' were excluded due to low reporting frequency (<5%)
+# 'misc' was excluded due to unclear definition
+
+# total n=78
 food_item <- c("bean","soy",
                "potatoT","corn","yam","pea",
                "brocc","cabbage","caulif","bruss","kale",
                "spinach","rlett",
-               "tomatoT","carrot",
-               "celery","pepper","onion","eggplant","mixveg",
-               "ilett","strbean",
+               "tomatoT","carrot",#"osqua",
+               "celery","pepper","onion","eggplant","ilett","strbean",
+               "mixveg",
                #----#
                "orange","grfruit","blueb","strawb","apple","prune","peach","grape","banana","cantaloupe","avocado","othJ",
                "milk","yogurt","cheese","butter","daidess","cream",
-               "fish","seafood","poultry","rmeat","egg",
+               "fish","seafood",
+               "process_poultry","unprocess_poultry",
+               "process_rm","unprocess_rm",
+               "egg",
                "peanut","walnut","othnut",
                "bran","dkbread","brice","cereal","oatmeal","popcorn",
                "cracker","whbread","whrice","othRG",
                "tea","coffee",
                "wine","beer","liquor",
                "dietbev","ssb",
+               "candy","chocolate","jam","dessert",
                "ooil","voil",
-               "bar","candy","chocolate","jam","dessert",
-               "chowdsoup","margarine","mayonnaise","pizza") 
+               "bar","chowdsoup","margarine","mayonnaise","pizza") 
 
 #### read in-------------------------------------------------------------------------
-# individual vegetables
-veg_ind <- c("bean","soy",
-             "potatoT","corn","yam","pea",
-             "brocc","cabbage","caulif","bruss","kale",
-             "spinach","rlett",
-             "tomatoT","carrot",
-             "celery","pepper","onion","eggplant",#"mixveg",
-             "ilett","strbean")
 all_data <- list()
-
 for (veg in veg_ind) {
-  sheet_data <- read.xlsx("./veg_ind_sen_tpm.xlsx", sheet = veg)
-  sheet_data <- sheet_data[, c("nmr_ppm","veg_target","p2_linear_bc_est","p2_linear_bc_p_adj")]
+  sheet_data <- read.xlsx("./Output/veg_ind_sen_tpm.xlsx", sheet = veg)
+  sheet_data <- sheet_data[, c("nmr_ppm","veg_target","p2_linear_int_est","p2_linear_int_p_adj")]
   all_data[[veg]] <- sheet_data
 }
 
 ana_veg <- do.call(rbind, all_data)
 
 # selected based on the significance of part2
-ana_veg <- ana_veg[which(ana_veg$p2_linear_bc_est>0 & ana_veg$p2_linear_bc_p_adj<0.05),]
+ana_veg <- ana_veg[which(ana_veg$p2_linear_int_est>0 & ana_veg$p2_linear_int_p_adj<0.05),] #10
 table(ana_veg$veg_target)
 table(ana_veg$nmr_ppm)
-PPM_select <- unique(ana_veg$nmr_ppm)
+PPM_select <- unique(ana_veg$nmr_ppm) #9
 
 # We examined the associations between these selected features and other food intake to evaluate specificity
 
 #### modeling -------------------------------------------------------------------------
-results_all <- data.frame()
+results_spec <- data.frame()
 
 for (i in 1:length(PPM_select)) {
   for (j in 1:length(food_item)) {
@@ -303,26 +304,14 @@ for (i in 1:length(PPM_select)) {
     
     p2_sample_size <- nrow(temp_data_positive) # consumers
     
-    if (p2_sample_size < 60) next    # skip items with reporting frequency < 5% (i.e., 1209 * 0.05 = 60.45)
+    if (p2_sample_size < 70) next    # skip items with reporting frequency < 5% (i.e., 1407 * 0.05 = 70.35)
     
-    # Box-Cox
-    if (length(unique(temp_data_positive[[current_food]])) > 1) {
-      bc_model <- lm(as.formula(paste0(current_food, "~", current_PPM)), data = temp_data_positive)
-      bc_result <- boxcox(bc_model, lambda = seq(-2, 2, by = 0.1))
-      bc_lambda <- bc_result$x[which.max(bc_result$y)]
-      
-      temp_data_positive$veg_trans <- if (bc_lambda == 0) {
-        log(temp_data_positive[[current_food]])
-      } else {
-        (temp_data_positive[[current_food]]^bc_lambda - 1) / bc_lambda
-      }
-    } else {
-      temp_data_positive$veg_trans <- temp_data_positive[[current_food]]
-      bc_lambda <- NA  
-    }
+    # INT-transform
+    temp_data_positive <- INT(temp_data_positive, current_food)
+    temp_data_positive$food_trans <- temp_data_positive[[paste0(current_food,"_INT")]]
     
     linear_model <- lm(
-      formula = as.formula(paste0("veg_trans ~ ", current_PPM)),
+      formula = as.formula(paste0("food_trans ~ ", current_PPM)),
       data = temp_data_positive
     )
     linear_summary <- summary(linear_model)
@@ -331,8 +320,8 @@ for (i in 1:length(PPM_select)) {
     linear_pvalue <- linear_summary$coefficients[2, "Pr(>|t|)"]
     
     # summary
-    results_all <- rbind(
-      results_all,
+    results_spec <- rbind(
+      results_spec,
       data.frame(
         nmr_PPM_select = current_PPM,
         food_target = current_food,
@@ -341,53 +330,57 @@ for (i in 1:length(PPM_select)) {
         p1_logistic_se = logistic_se,
         p1_logistic_p = logistic_pvalue,
         p2_n = p2_sample_size,
-        p2_linear_bc_est = linear_estimate,
-        p2_linear_bc_se = linear_se,
-        p2_linear_bc_p = linear_pvalue,
-        bc_lambda = bc_lambda
+        p2_linear_int_est = linear_estimate,
+        p2_linear_int_se = linear_se,
+        p2_linear_int_p = linear_pvalue
       )
     )
   }
 }
 
-dim(results_all)
+dim(results_spec)
+# 702  10
+# 9*78=702
 
 # FDR adjustment applied separately within each feature
-results_all_fdr <- results_all %>%
+results_spec_fdr <- results_spec %>%
   group_by(nmr_PPM_select) %>%
   mutate(
     p1_logistic_p_adj = p.adjust(p1_logistic_p, method = "BH"), 
-    p2_linear_bc_p_adj = p.adjust(p2_linear_bc_p, method = "BH")
+    p2_linear_int_p_adj = p.adjust(p2_linear_int_p, method = "BH")
   ) %>%
   ungroup() 
 
 # add labels for downstream feature selection
 # estimate>0 & FDR-p<0.05 (p1 or p2)
-results_all_fdr_sign <- results_all_fdr[which((results_all_fdr$p1_logistic_est>0  & results_all_fdr$p1_logistic_p_adj<0.05) | 
-                                                (results_all_fdr$p2_linear_bc_est>0 & results_all_fdr$p2_linear_bc_p_adj<0.05)),]
-table(results_all_fdr_sign$nmr_PPM_select)
+results_spec_fdr_sign <- results_spec_fdr[which((results_spec_fdr$p1_logistic_est>0  & results_spec_fdr$p1_logistic_p_adj<0.05) | 
+                                                (results_spec_fdr$p2_linear_int_est>0 & results_spec_fdr$p2_linear_int_p_adj<0.05)),]
+table(results_spec_fdr_sign$nmr_PPM_select)
 
-#### output -------------------------------------------------------------------------
-output_file <- "./veg_ind_spec_tpm.xlsx"
+#### save -------------------------------------------------------------------------
+output_file <- "./Output/veg_ind_spec_tpm.xlsx"
 wb <- createWorkbook()
 
 addWorksheet(wb, sheetName = "p1_or_p2_sign")
-writeData(wb, sheet = "p1_or_p2_sign", x = results_all_fdr_sign)
+writeData(wb, sheet = "p1_or_p2_sign", x = results_spec_fdr_sign)
 
-addWorksheet(wb, sheetName = "results_all_fdr")
-writeData(wb, sheet = "results_all_fdr", x = results_all_fdr)
+addWorksheet(wb, sheetName = "results_spec_fdr")
+writeData(wb, sheet = "results_spec_fdr", x = results_spec_fdr)
 
 saveWorkbook(wb, file = output_file, overwrite = TRUE)
 
-# step 3. correlation -------------------------------------------------------------------------
+# step 3. correlation with raw intake -------------------------------------------------------------------------
 # From step 2 selected features, retain those linked to ≤5 non-target foods
-# Brussels sprout: (PPM1, PPM2, PPM3) 
-# onion (PPM4)
+# Brussels sprout: (PPM2775, PPM2795, PPM2825) 
+# onion (PPM6485)
 
 #### features for Brussels sprout intake -------------------------------------------------------------------------
-fea_bruss <- c("PPM1","PPM2","PPM3")
+### cruciferous vegetables: broccoli, cabbage/coleslaw, cauliflower, Brussels sprouts, kale/mustd greens/chard
+fea_bruss <- c("PPM2775","PPM2795","PPM2825")
 var_bruss <- c("bruss",
-               "brocc","caulif","cabbage","kale","crucif")
+               "brocc","caulif","cabbage","kale","crucif",
+               "onion","othnut")
+
 
 # selected features and intake of Brussels sprouts and other cruciferous vegetables
 results_bruss <- data.frame(
@@ -457,10 +450,14 @@ for (fea in fea_bruss) {
 
 # within selected features
 cor(ana_wk2[, fea_bruss], use = "pairwise.complete.obs", method = "spearman")
+#          PPM2775  PPM2795   PPM2825
+#PPM2775 1.0000000 0.862852 0.6310915
+#PPM2795 0.8628520 1.000000 0.6237280
+#PPM2825 0.6310915 0.623728 1.0000000
 
 #### features for onion intake -------------------------------------------------------------------------
-fea_onion <- c("PPM4")
-var_onion <- c("onion","mixveg") # associated foods
+fea_onion <- c("PPM6485")
+var_onion <- c("onion","pepper","coffee") # associated foods
 
 # selected features and onion intake
 results_onion <- data.frame(
@@ -495,7 +492,7 @@ for (fea in fea_onion) {
           Spearman_P = spearman$p.value,
           Pearson_Coef = pearson$estimate,
           Pearson_P = pearson$p.value,
-          N = nrow(df_consumer)
+          N = nrow(df_filtered)
         ))
       }
     }
@@ -527,8 +524,8 @@ for (fea in fea_onion) {
   }
 }
 
-#### output -------------------------------------------------------------------------
-output_file <- "./veg_ind_select_corr.xlsx"
+#### save -------------------------------------------------------------------------
+output_file <- "./Output/veg_ind_select_corr.xlsx"
 wb <- createWorkbook()
 
 addWorksheet(wb, sheetName = "bruss")
@@ -538,4 +535,3 @@ addWorksheet(wb, sheetName = "onion")
 writeData(wb, sheet = "onion", x = results_onion)
 
 saveWorkbook(wb, file = output_file, overwrite = TRUE)
-
