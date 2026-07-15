@@ -1,0 +1,227 @@
+######################################################################################################################
+#' @Programmer Han Han
+#' @Creation_date 02/2025
+#' @Revised_date 07/2026
+#' @Project Vegetable Biomarkers and CHD Risk
+#' @Purpose To replicate identified single/composite biomarkers in SOLNAS
+######################################################################################################################
+
+# clean the environment---------------------------------------------------
+rm(list=ls())
+
+# settings-------------------------------------------------------------------------
+options(bitmapType='cairo')
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(purrr)
+library(rlang)
+library(MetabolAnalyze)
+library(glmnet)
+library(openxlsx)  
+library(haven)
+library(data.table)
+library(tableone)
+library(ICC)
+
+setwd(".")
+getwd()
+
+#################### NOTE -------------------------------------------------------------------------
+
+# HCHS/SOL has established a process for the scientific community to apply for access to participant data and materials, with requests reviewed by the SOL Steering Committee.
+
+# Because of participant confidentiality and privacy concerns, data cannot be shared publicly and requests to access NHS/NHSII/HPFS data must be submitted in writing. 
+
+#################### replicate metabolomic signatures -------------------------------------------------------------------------
+food_score <- c("vegtot_w_pot","vegtot",
+                "potatoT","starchy",
+                "legume","nonstarchy",
+                "dkgrveg","redoveg_wo_starchy")
+
+# calculate scores
+for (food in food_score) {
+  message("Processing: ", food)
+  
+  file_path <- file.path("./Output/", paste0(food, ".eln.score.intake.LOG.csv"))
+  
+  if (!file.exists(file_path)) {
+    warning("File not found: ", file_path)
+    next
+  }
+  
+  d <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE)
+  
+  betas <- setNames(d$Betas, d$PPM)
+  
+  score_name <- paste0(food, ".score.log")
+  solnas_fbm[[score_name]] <-
+    as.numeric(as.matrix(solnas_fbm[, names(betas)]) %*% betas)
+  
+  print(summary(solnas_fbm[[score_name]]))
+}
+
+#################### Spearman correlation (transformed) -------------------------------------------------------------------------
+# functions -------------------------------------------------------------------------
+### rank-based normalization ###
+rank_to_norm <- function(x) {
+  n <- sum(!is.na(x))
+  r <- rank(x, ties.method = "average", na.last = "keep")
+  qnorm(r / (n + 1))
+}
+
+### converts a Pearson correlation into its approximate Spearman rank correlation ###
+pearson_to_spearman <- function(r) {
+  (6 / pi) * asin(r / 2)
+}
+
+### rankcorr ###
+rankcorr_base <- function(df, id_col, bio_col, intake_cols, intake_cols_lambda, id_cor, id_lambda) {
+  
+  ### calculate observed correlations
+  df_cor <- df[df[[id_col]] %in% id_cor, , drop = FALSE]
+  hhstar <- rank_to_norm(df_cor[[bio_col]])
+  
+  hhat_cor_list <- lapply(intake_cols, function(v) rank_to_norm(df_cor[[v]]))
+  hhat_cor_mat <- do.call(cbind, hhat_cor_list)
+  hhat_mean <- rowMeans(hhat_cor_mat, na.rm = TRUE)
+  hhat_mean[is.nan(hhat_mean)] <- NA
+  
+  ok <- !is.na(hhstar) & !is.na(hhat_mean)
+  n_used <- sum(ok)
+  
+  r_obs_norm <- cor(hhat_mean[ok], hhstar[ok], method = "pearson") 
+  spear_obs <- pearson_to_spearman(r_obs_norm)
+  
+  t_stat <- r_obs_norm * sqrt((n_used - 2) / (1 - r_obs_norm^2))
+  spear_obs_p <- 2 * pt(-abs(t_stat), df = n_used - 2)
+  
+  gamma <- NA_real_
+  gamma <- unname(coef(lm(hhat_mean ~ hhstar, subset = ok))[2])
+  
+  ### calculate ICCs and lambda
+  df_lam <- df[df[[id_col]] %in% id_lambda, , drop = FALSE]
+  hhat_lam_list <- lapply(intake_cols_lambda, function(v) rank_to_norm(df_lam[[v]]))
+  
+  long <- data.frame(
+    id = factor(rep(df_lam[[id_col]], times = length(intake_cols_lambda))),
+    y  = as.vector(do.call(cbind, hhat_lam_list))
+  )
+  long <- long[!is.na(long$id) & !is.na(long$y), , drop = FALSE]
+  
+  within <- between <- lambda <- icc <- NA_real_
+  m_cor <- length(intake_cols)
+  n_rep_lam <- length(intake_cols_lambda)
+  
+  a <- anova(aov(y ~ id, data = long))
+  within <- a["Residuals", "Mean Sq"]
+  between <- (a["id", "Mean Sq"] - within) / n_rep_lam
+  if (!is.na(between) && between > 0) {
+    lambda <- within / between
+    icc <- between / (between + within)
+  }
+  
+  ### calculate de-attenuated correlations
+  spear_corr <- NA_real_
+  if (!is.na(lambda) && !is.na(r_obs_norm) && !is.na(between) && between > 0) {
+    r_corr_norm <- r_obs_norm * sqrt(1 + lambda / m_cor)
+    spear_corr <- pearson_to_spearman(r_corr_norm)
+  }
+  
+  ### output
+  data.frame(
+    spear_obs   = spear_obs,
+    spear_obs_p = spear_obs_p,
+    spear_corr  = spear_corr,
+    within_var  = within,
+    between_var = between,
+    lambda      = lambda,
+    icc         = icc,
+    gamma       = gamma,
+    m_cor       = m_cor,
+    n_lambda    = n_rep_lam
+  )
+}
+
+### organize ###
+rankcorr_res <- function(df, id_col, bio_col, id_cor, id_lambda, list_cor, list_lambda) {
+  results <- list()
+  counter <- 1
+  
+  for (i in seq_along(list_cor)) {
+    for (j in seq_along(list_lambda)) {
+      
+      res <- rankcorr_base(
+        df = df, id_col = id_col, bio_col = bio_col,
+        intake_cols = list_cor[[i]],
+        intake_cols_lambda = list_lambda[[j]],
+        id_cor = id_cor, id_lambda = id_lambda
+      )
+      
+      res$scenario <- paste0("res", counter)
+      res$cor_vars <- paste(list_cor[[i]], collapse = " + ")
+      res$lambda_vars <- paste(list_lambda[[j]], collapse = " + ")
+      
+      results[[counter]] <- res
+      counter <- counter + 1
+    }
+  }
+  
+  bind_rows(results) %>%
+    dplyr::select(scenario, cor_vars, lambda_vars, spear_obs, spear_obs_p, spear_corr, icc, lambda, within_var, between_var, gamma, m_cor, n_lambda)
+}
+
+# calculate correlations -------------------------------------------------------------------------
+### wrapper ###
+run_score_list <- function(prefix, df, id_cor_list, id_lambda_list) {
+  
+  bio_name <- paste0(prefix, ".score.log")
+  
+  cor_vars <- list(
+    paste0(prefix, ".solnasm")
+  )
+  
+  lambda_vars <- list(
+    paste0(prefix, c(".solv1", ".solv2", ".solnasm", ".solnasr1", ".solnasr2"))
+  )
+  
+  res <- rankcorr_res(
+    df = df,
+    id_col = "ID",
+    bio_col = bio_name,
+    id_cor = id_cor_list,
+    id_lambda = id_lambda_list,
+    list_cor = cor_vars,
+    list_lambda = lambda_vars
+  )
+  
+  res$biomarker <- prefix
+  res <- res %>% dplyr::select(biomarker, everything())
+  
+  return(res)
+}
+
+# prepare variables (names)
+solnas_rep$redoveg.score.log <- solnas_rep$redoveg_wo_starchy.score.log
+solnas_rep$potato.score.log  <- solnas_rep$potatoT.score.log
+
+item_list <- c("vegtot", "vegtot_w_pot", "potato", "starchy","legume", "nonstarchy","dkgrveg", "redoveg") 
+
+spcor_res <- lapply(item_list, function(item) {
+  run_score_list(
+    prefix = item,
+    df = solnas_rep,                 ### set dataset
+    id_cor_list = solnas_fbm$id,     ### with biomarkers
+    id_lambda_list = solnas_r2$ID    ### solnas reliability study
+  )
+}) %>% 
+  dplyr::bind_rows()
+
+# save -------------------------------------------------------------------------
+output_file <- "./Output/solnas_rep_spearman.xlsx"
+wb <- createWorkbook()
+
+addWorksheet(wb, sheetName = "spcor_solnas")
+writeData(wb, sheet = "spcor_solnas", x = spcor_res)
+
+saveWorkbook(wb, file = output_file, overwrite = TRUE)
